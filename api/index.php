@@ -17,6 +17,40 @@ $settings = [
 
 $app = new \Slim\App($settings);
 
+$allowedOrigin = getenv('APP_ALLOWED_ORIGIN') ?: '*';
+$allowedHeaders = getenv('APP_ALLOWED_HEADERS') ?: 'Content-Type, Authorization, X-Requested-With, Accept, Origin';
+$allowedMethods = getenv('APP_ALLOWED_METHODS') ?: 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
+$allowCredentials = filter_var(getenv('APP_ALLOW_CREDENTIALS'), FILTER_VALIDATE_BOOLEAN);
+
+$app->options('/{routes:.+}', function ($request, $response) use ($allowedOrigin, $allowedHeaders, $allowedMethods, $allowCredentials) {
+    $response = $response
+        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
+        ->withHeader('Access-Control-Allow-Headers', $allowedHeaders)
+        ->withHeader('Access-Control-Allow-Methods', $allowedMethods);
+
+    if ($allowCredentials) {
+        $response = $response->withHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    return $response;
+});
+
+$app->add(function ($request, $response, $next) use ($allowedOrigin, $allowedHeaders, $allowedMethods, $allowCredentials) {
+    /** @var \Psr\Http\Message\ResponseInterface $response */
+    $response = $next($request, $response);
+
+    $response = $response
+        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
+        ->withHeader('Access-Control-Allow-Headers', $allowedHeaders)
+        ->withHeader('Access-Control-Allow-Methods', $allowedMethods);
+
+    if ($allowCredentials) {
+        $response = $response->withHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    return $response;
+});
+
 $container = $app->getContainer();
 
 $container['db'] = function ($c) {
