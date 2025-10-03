@@ -17,40 +17,6 @@ $settings = [
 
 $app = new \Slim\App($settings);
 
-$allowedOrigin = getenv('APP_ALLOWED_ORIGIN') ?: '*';
-$allowedHeaders = getenv('APP_ALLOWED_HEADERS') ?: 'Content-Type, Authorization, X-Requested-With, Accept, Origin';
-$allowedMethods = getenv('APP_ALLOWED_METHODS') ?: 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
-$allowCredentials = filter_var(getenv('APP_ALLOW_CREDENTIALS'), FILTER_VALIDATE_BOOLEAN);
-
-$app->options('/{routes:.+}', function ($request, $response) use ($allowedOrigin, $allowedHeaders, $allowedMethods, $allowCredentials) {
-    $response = $response
-        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
-        ->withHeader('Access-Control-Allow-Headers', $allowedHeaders)
-        ->withHeader('Access-Control-Allow-Methods', $allowedMethods);
-
-    if ($allowCredentials) {
-        $response = $response->withHeader('Access-Control-Allow-Credentials', 'true');
-    }
-
-    return $response;
-});
-
-$app->add(function ($request, $response, $next) use ($allowedOrigin, $allowedHeaders, $allowedMethods, $allowCredentials) {
-    /** @var \Psr\Http\Message\ResponseInterface $response */
-    $response = $next($request, $response);
-
-    $response = $response
-        ->withHeader('Access-Control-Allow-Origin', $allowedOrigin)
-        ->withHeader('Access-Control-Allow-Headers', $allowedHeaders)
-        ->withHeader('Access-Control-Allow-Methods', $allowedMethods);
-
-    if ($allowCredentials) {
-        $response = $response->withHeader('Access-Control-Allow-Credentials', 'true');
-    }
-
-    return $response;
-});
-
 $container = $app->getContainer();
 
 $container['db'] = function ($c) {
@@ -69,6 +35,19 @@ $container['db'] = function ($c) {
 
     return $pdo;
 };
+
+$app->options('/{routes:.+}', function ($request, $response) {
+    return $response;
+});
+
+$app->add(function ($request, $response, $next) {
+    $response = $next($request, $response);
+
+    return $response
+        ->withHeader('Access-Control-Allow-Origin', '*')
+        ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+});
 
 $app->post('/iniciar-sesion', function ($request, $response) {
     $data = $request->getParsedBody() ?? [];
@@ -115,6 +94,132 @@ $app->post('/iniciar-sesion', function ($request, $response) {
     ];
 
     return $response->withJson($payload, 401);
+});
+
+$app->post('/crear-consulta', function ($request, $response) {
+    $data = $request->getParsedBody() ?? [];
+
+    $medicoId = isset($data['medicoId']) ? (int) $data['medicoId'] : 0;
+    $pacienteId = isset($data['pacienteId']) ? (int) $data['pacienteId'] : 0;
+    $fecha = isset($data['fecha']) ? trim($data['fecha']) : '';
+    $hora = isset($data['hora']) ? trim($data['hora']) : '';
+    $motivo = isset($data['motivo']) ? trim($data['motivo']) : '';
+    $notas = isset($data['notas']) ? trim($data['notas']) : '';
+
+    $errores = [];
+
+    if ($medicoId <= 0) {
+        $errores['medicoId'] = 'El médico es obligatorio.';
+    }
+
+    if ($pacienteId <= 0) {
+        $errores['pacienteId'] = 'El paciente es obligatorio.';
+    }
+
+    if ($fecha === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+        $errores['fecha'] = 'La fecha debe tener el formato YYYY-MM-DD.';
+    } else {
+        [$year, $month, $day] = array_map('intval', explode('-', $fecha));
+        if (!checkdate($month, $day, $year)) {
+            $errores['fecha'] = 'La fecha proporcionada no es válida.';
+        }
+    }
+
+    if ($hora === '' || !preg_match('/^\d{2}:\d{2}$/', $hora)) {
+        $errores['hora'] = 'La hora debe tener el formato HH:MM.';
+    } else {
+        [$hour, $minute] = array_map('intval', explode(':', $hora));
+        if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59) {
+            $errores['hora'] = 'La hora proporcionada no es válida.';
+        }
+    }
+
+    if ($motivo === '') {
+        $errores['motivo'] = 'El motivo es obligatorio.';
+    } elseif (mb_strlen($motivo) > 200) {
+        $errores['motivo'] = 'El motivo no puede superar los 200 caracteres.';
+    }
+
+    if ($errores) {
+        $payload = [
+            'estado' => false,
+            'mensaje' => 'Datos inválidos.',
+            'errores' => $errores,
+        ];
+
+        return $response->withJson($payload, 400);
+    }
+
+    /** @var PDO $pdo */
+    $pdo = $this->get('db');
+
+    try {
+        $pdo->beginTransaction();
+
+        $stmtMedico = $pdo->prepare('SELECT id, activo FROM medicos WHERE id = :id LIMIT 1');
+        $stmtMedico->execute(['id' => $medicoId]);
+        $medico = $stmtMedico->fetch();
+
+        if (!$medico) {
+            $pdo->rollBack();
+
+            $payload = [
+                'estado' => false,
+                'mensaje' => 'El médico seleccionado no existe.',
+            ];
+
+            return $response->withJson($payload, 404);
+        }
+
+        $stmtPaciente = $pdo->prepare('SELECT id, activo FROM paciente WHERE id = :id LIMIT 1');
+        $stmtPaciente->execute(['id' => $pacienteId]);
+        $paciente = $stmtPaciente->fetch();
+
+        if (!$paciente) {
+            $pdo->rollBack();
+
+            $payload = [
+                'estado' => false,
+                'mensaje' => 'El paciente seleccionado no existe.',
+            ];
+
+            return $response->withJson($payload, 404);
+        }
+
+        $stmtInsert = $pdo->prepare(
+            'INSERT INTO consulta (id_medico, id_paciente, fecha, hora, motivo, notas) VALUES (:id_medico, :id_paciente, :fecha, :hora, :motivo, :notas)'
+        );
+
+        $stmtInsert->execute([
+            'id_medico' => $medicoId,
+            'id_paciente' => $pacienteId,
+            'fecha' => $fecha,
+            'hora' => $hora,
+            'motivo' => $motivo,
+            'notas' => $notas !== '' ? $notas : null,
+        ]);
+
+        $pdo->commit();
+
+        $payload = [
+            'estado' => true,
+            'mensaje' => 'Consulta registrada correctamente.',
+            'idConsulta' => (int) $pdo->lastInsertId(),
+        ];
+
+        return $response->withJson($payload, 201);
+    } catch (\Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        $payload = [
+            'estado' => false,
+            'mensaje' => 'No fue posible registrar la consulta.',
+        ];
+
+        return $response->withJson($payload, 500);
+    }
 });
 
 $app->run();
