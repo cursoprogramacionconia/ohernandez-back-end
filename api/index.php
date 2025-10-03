@@ -97,47 +97,53 @@ $app->post('/iniciar-sesion', function ($request, $response) {
 });
 
 $app->post('/crear-consulta', function ($request, $response) {
-    $data = $request->getParsedBody() ?? [];
+    $data = $request->getParsedBody();
+    if (!is_array($data)) {
+        $data = [];
+    }
 
-    $medicoId = isset($data['medicoId']) ? (int) $data['medicoId'] : 0;
-    $pacienteId = isset($data['pacienteId']) ? (int) $data['pacienteId'] : 0;
-    $fecha = isset($data['fecha']) ? trim($data['fecha']) : '';
-    $hora = isset($data['hora']) ? trim($data['hora']) : '';
-    $motivo = isset($data['motivo']) ? trim($data['motivo']) : '';
-    $notas = isset($data['notas']) ? trim($data['notas']) : '';
+    $medicoId = 0;
+    foreach (['id_medico', 'medicoId'] as $key) {
+        if ($medicoId <= 0 && isset($data[$key])) {
+            $medicoId = (int) $data[$key];
+        }
+    }
+
+    $pacienteId = 0;
+    foreach (['id_paciente', 'pacienteId'] as $key) {
+        if ($pacienteId <= 0 && isset($data[$key])) {
+            $pacienteId = (int) $data[$key];
+        }
+    }
+
+    $sintomas = '';
+    foreach (['sintomas', 'motivo'] as $key) {
+        if ($sintomas === '' && isset($data[$key])) {
+            $sintomas = trim((string) $data[$key]);
+        }
+    }
+
+    $recomendaciones = '';
+    foreach (['recomendaciones', 'notas'] as $key) {
+        if ($recomendaciones === '' && isset($data[$key])) {
+            $recomendaciones = trim((string) $data[$key]);
+        }
+    }
+
+    $diagnostico = isset($data['diagnostico']) ? trim((string) $data['diagnostico']) : '';
 
     $errores = [];
 
     if ($medicoId <= 0) {
-        $errores['medicoId'] = 'El médico es obligatorio.';
+        $errores['id_medico'] = 'El médico es obligatorio.';
     }
 
     if ($pacienteId <= 0) {
-        $errores['pacienteId'] = 'El paciente es obligatorio.';
+        $errores['id_paciente'] = 'El paciente es obligatorio.';
     }
 
-    if ($fecha === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
-        $errores['fecha'] = 'La fecha debe tener el formato YYYY-MM-DD.';
-    } else {
-        [$year, $month, $day] = array_map('intval', explode('-', $fecha));
-        if (!checkdate($month, $day, $year)) {
-            $errores['fecha'] = 'La fecha proporcionada no es válida.';
-        }
-    }
-
-    if ($hora === '' || !preg_match('/^\d{2}:\d{2}$/', $hora)) {
-        $errores['hora'] = 'La hora debe tener el formato HH:MM.';
-    } else {
-        [$hour, $minute] = array_map('intval', explode(':', $hora));
-        if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59) {
-            $errores['hora'] = 'La hora proporcionada no es válida.';
-        }
-    }
-
-    if ($motivo === '') {
-        $errores['motivo'] = 'El motivo es obligatorio.';
-    } elseif (mb_strlen($motivo) > 200) {
-        $errores['motivo'] = 'El motivo no puede superar los 200 caracteres.';
+    if ($sintomas === '') {
+        $errores['sintomas'] = 'Los síntomas son obligatorios.';
     }
 
     if ($errores) {
@@ -156,11 +162,9 @@ $app->post('/crear-consulta', function ($request, $response) {
     try {
         $pdo->beginTransaction();
 
-        $stmtMedico = $pdo->prepare('SELECT id, activo FROM medicos WHERE id = :id LIMIT 1');
+        $stmtMedico = $pdo->prepare('SELECT id FROM medicos WHERE id = :id LIMIT 1');
         $stmtMedico->execute(['id' => $medicoId]);
-        $medico = $stmtMedico->fetch();
-
-        if (!$medico) {
+        if (!$stmtMedico->fetch()) {
             $pdo->rollBack();
 
             $payload = [
@@ -171,11 +175,9 @@ $app->post('/crear-consulta', function ($request, $response) {
             return $response->withJson($payload, 404);
         }
 
-        $stmtPaciente = $pdo->prepare('SELECT id, activo FROM paciente WHERE id = :id LIMIT 1');
+        $stmtPaciente = $pdo->prepare('SELECT id FROM paciente WHERE id = :id LIMIT 1');
         $stmtPaciente->execute(['id' => $pacienteId]);
-        $paciente = $stmtPaciente->fetch();
-
-        if (!$paciente) {
+        if (!$stmtPaciente->fetch()) {
             $pdo->rollBack();
 
             $payload = [
@@ -187,16 +189,15 @@ $app->post('/crear-consulta', function ($request, $response) {
         }
 
         $stmtInsert = $pdo->prepare(
-            'INSERT INTO consulta (id_medico, id_paciente, fecha, hora, motivo, notas) VALUES (:id_medico, :id_paciente, :fecha, :hora, :motivo, :notas)'
+            'INSERT INTO consulta (id_medico, id_paciente, sintomas, recomendaciones, diagnostico) VALUES (:id_medico, :id_paciente, :sintomas, :recomendaciones, :diagnostico)'
         );
 
         $stmtInsert->execute([
             'id_medico' => $medicoId,
             'id_paciente' => $pacienteId,
-            'fecha' => $fecha,
-            'hora' => $hora,
-            'motivo' => $motivo,
-            'notas' => $notas !== '' ? $notas : null,
+            'sintomas' => $sintomas,
+            'recomendaciones' => $recomendaciones !== '' ? $recomendaciones : null,
+            'diagnostico' => $diagnostico !== '' ? $diagnostico : null,
         ]);
 
         $pdo->commit();
