@@ -103,69 +103,47 @@ $app->post('/crear-consulta', function ($request, $response) {
     }
 
     $medicoId = 0;
-    foreach (['medicoId', 'id_medico'] as $key) {
+    foreach (['id_medico', 'medicoId'] as $key) {
         if ($medicoId <= 0 && isset($data[$key])) {
             $medicoId = (int) $data[$key];
         }
     }
 
     $pacienteId = 0;
-    foreach (['pacienteId', 'id_paciente'] as $key) {
+    foreach (['id_paciente', 'pacienteId'] as $key) {
         if ($pacienteId <= 0 && isset($data[$key])) {
             $pacienteId = (int) $data[$key];
         }
     }
 
-    $sintomas = isset($data['sintomas']) ? trim((string) $data['sintomas']) : '';
-    $motivo = isset($data['motivo']) ? trim((string) $data['motivo']) : '';
-    if ($sintomas === '' && $motivo !== '') {
-        $sintomas = $motivo;
+    $sintomas = '';
+    foreach (['sintomas', 'motivo'] as $key) {
+        if ($sintomas === '' && isset($data[$key])) {
+            $sintomas = trim((string) $data[$key]);
+        }
     }
 
-    $recomendaciones = isset($data['recomendaciones']) ? trim((string) $data['recomendaciones']) : '';
-    $notas = isset($data['notas']) ? trim((string) $data['notas']) : '';
-    if ($recomendaciones === '' && $notas !== '') {
-        $recomendaciones = $notas;
+    $recomendaciones = '';
+    foreach (['recomendaciones', 'notas'] as $key) {
+        if ($recomendaciones === '' && isset($data[$key])) {
+            $recomendaciones = trim((string) $data[$key]);
+        }
     }
 
     $diagnostico = isset($data['diagnostico']) ? trim((string) $data['diagnostico']) : '';
-    $fecha = isset($data['fecha']) ? trim((string) $data['fecha']) : '';
-    $hora = isset($data['hora']) ? trim((string) $data['hora']) : '';
-
-    $diagnosticoPartes = [];
-    if ($diagnostico !== '') {
-        $diagnosticoPartes[] = $diagnostico;
-    }
-    if ($fecha !== '') {
-        $diagnosticoPartes[] = 'Fecha: ' . $fecha;
-    }
-    if ($hora !== '') {
-        $diagnosticoPartes[] = 'Hora: ' . $hora;
-    }
-    $diagnosticoNormalizado = implode(' | ', $diagnosticoPartes);
 
     $errores = [];
 
     if ($medicoId <= 0) {
-        $errores['medicoId'] = 'El médico es obligatorio.';
+        $errores['id_medico'] = 'El médico es obligatorio.';
     }
 
     if ($pacienteId <= 0) {
-        $errores['pacienteId'] = 'El paciente es obligatorio.';
+        $errores['id_paciente'] = 'El paciente es obligatorio.';
     }
 
     if ($sintomas === '') {
-        $errores['motivo'] = 'El motivo o los síntomas son obligatorios.';
-    } elseif (mb_strlen($sintomas) > 1000) {
-        $errores['motivo'] = 'El motivo no puede superar los 1000 caracteres.';
-    }
-
-    if ($recomendaciones !== '' && mb_strlen($recomendaciones) > 1000) {
-        $errores['notas'] = 'Las notas o recomendaciones no pueden superar los 1000 caracteres.';
-    }
-
-    if ($diagnosticoNormalizado !== '' && mb_strlen($diagnosticoNormalizado) > 1000) {
-        $errores['diagnostico'] = 'El diagnóstico no puede superar los 1000 caracteres.';
+        $errores['sintomas'] = 'Los síntomas son obligatorios.';
     }
 
     if ($errores) {
@@ -219,7 +197,7 @@ $app->post('/crear-consulta', function ($request, $response) {
             'id_paciente' => $pacienteId,
             'sintomas' => $sintomas,
             'recomendaciones' => $recomendaciones !== '' ? $recomendaciones : null,
-            'diagnostico' => $diagnosticoNormalizado !== '' ? $diagnosticoNormalizado : null,
+            'diagnostico' => $diagnostico !== '' ? $diagnostico : null,
         ]);
 
         $pdo->commit();
