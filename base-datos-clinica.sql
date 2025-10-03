@@ -45,14 +45,15 @@ CREATE TABLE usuario (
         ON UPDATE CASCADE
 );
 
--- Tabla: consulta
 CREATE TABLE consulta (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_medico INT NOT NULL,
     id_paciente INT NOT NULL,
-    sintomas TEXT,
-    recomendaciones TEXT,
-    diagnostico TEXT,
+    fecha DATE NOT NULL,
+    hora TIME NOT NULL,
+    motivo VARCHAR(200) NOT NULL,
+    notas TEXT,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_medico) REFERENCES medicos(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE,
@@ -60,3 +61,36 @@ CREATE TABLE consulta (
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
+
+-- Datos iniciales para medicos
+INSERT INTO medicos (
+    primer_nombre,
+    segundo_nombre,
+    apellido_paterno,
+    apellido_materno,
+    cedula,
+    telefono,
+    especialidad,
+    email,
+    activo
+)
+VALUES
+    ('Ana', 'Lucía', 'García', 'Ramírez', 'MED-001', '+52 55 1111 1111', 'Cardiología', 'ana.garcia@example.com', 1),
+    ('Bruno', NULL, 'Hernández', 'Santos', 'MED-002', '+52 55 2222 2222', 'Pediatría', 'bruno.hernandez@example.com', 1),
+    ('Carla', 'María', 'López', 'Martínez', 'MED-003', '+52 55 3333 3333', 'Dermatología', 'carla.lopez@example.com', 0),
+    ('Diego', NULL, 'Ortiz', 'Flores', 'MED-004', '+52 55 4444 4444', 'Neurología', 'diego.ortiz@example.com', 1);
+
+-- Datos iniciales para pacientes
+INSERT INTO paciente (
+    primer_nombre,
+    segundo_nombre,
+    apellido_paterno,
+    apellido_materno,
+    telefono,
+    activo
+)
+VALUES
+    ('Elena', 'Sofía', 'Pérez', 'Gómez', '+52 55 5555 5555', 1),
+    ('Fernando', NULL, 'Ruiz', 'Lara', '+52 55 6666 6666', 1),
+    ('Gabriela', 'Isabel', 'Torres', 'Nava', '+52 55 7777 7777', 0),
+    ('Héctor', NULL, 'Jiménez', 'Vega', '+52 55 8888 8888', 1);
